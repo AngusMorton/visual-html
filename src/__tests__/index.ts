@@ -297,7 +297,10 @@ test("includes pseudo elements", () => {
   `;
 
   expect(testHTML(html, styles)).toMatchInlineSnapshot(`
-    "<div>
+    "<style>
+      ::selection {background: blue}
+    </style>
+    <div>
       <style>@scope{:scope{
         &::after {
           color: green;
@@ -306,9 +309,6 @@ test("includes pseudo elements", () => {
         &::selection {background: red}
       }}</style>
       <span>
-        <style>@scope{:scope{
-          &::selection {background: blue}
-        }}</style>
         Content
       </span>
     </div>"

@@ -17,7 +17,10 @@ export function stringifyVisualData(data: VisualData | string | null) {
   const attrs = printAttributes(data);
   const children = printChildren(data);
 
-  return `<${
+  // Add global styles at the beginning if present
+  const globalStylesBlock = printGlobalStyles(data);
+
+  return `${globalStylesBlock}<${
     tagName +
     (attrs.length
       ? attrs.length === 1
@@ -92,4 +95,32 @@ function printProperties(styles: { [x: string]: string }) {
 
 function indent(str: string) {
   return str.replace(/^/gm, "  ");
+}
+
+function printGlobalStyles(data: VisualData) {
+  const { globalStyles, globalPseudoStyles, globalRootStyles } = data;
+
+  if (!globalStyles && !globalPseudoStyles && !globalRootStyles) {
+    return "";
+  }
+
+  const parts: string[] = [];
+
+  if (globalStyles) {
+    parts.push(`* {${printProperties(globalStyles)}}`);
+  }
+
+  if (globalRootStyles) {
+    parts.push(`:root {${printProperties(globalRootStyles)}}`);
+  }
+
+  if (globalPseudoStyles) {
+    for (const pseudo in globalPseudoStyles) {
+      parts.push(`${pseudo} {${printProperties(globalPseudoStyles[pseudo])}}`);
+    }
+  }
+
+  return parts.length > 0
+    ? `<style>\n${indent(parts.join("\n"))}\n</style>\n`
+    : "";
 }

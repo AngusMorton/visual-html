@@ -1,9 +1,13 @@
 import { compare, calculate } from "specificity";
 import splitSelectors from "./split-selector";
-import { SelectorWithStyles } from "./types";
+import { SelectorWithStyles, GlobalStyles } from "./types";
 import { getDefaultStyles } from "./default-styles";
 const pseudoElementRegex =
   /([(>~|+\s])?\s*::?(before|after|checkmark|details-content|file-selector-button|first-letter|first-line|selection|backdrop|placeholder(?:-shown)|picker-icon|marker|spelling-error|grammar-error|target-text)(?![a-z-])/gi;
+const globalPseudoRegex =
+  /^::?(before|after|checkmark|details-content|file-selector-button|first-letter|first-line|selection|backdrop|placeholder(?:-shown)|picker-icon|marker|spelling-error|grammar-error|target-text)$/;
+const globalElementRegex = /^(\*|:host(?:-context\([^)]*\))?)$/;
+const rootRegex = /^:root$/;
 
 /**
  * Given a document, reads all style sheets returns extracts all CSSRules
@@ -52,9 +56,18 @@ export function getPseudoElementStyles(
     let match: RegExpExecArray | null = null;
     let seenPseudos: string[] | null = null;
 
+    // Find all pseudo-elements in the selector
     while ((match = pseudoElementRegex.exec(baseSelector))) {
       const name = `::${match[2]}`;
       const childCombinator = match[1];
+
+      // Only match if the pseudo is not preceded by a space (descendant selector)
+      // That is, only match if childCombinator is not a space or undefined
+      // (undefined means it's at the start, which is fine)
+      if (childCombinator && /\s/.test(childCombinator)) {
+        // Skip descendant pseudo-element selectors
+        continue;
+      }
 
       if (seenPseudos) {
         if (!seenPseudos.includes(name)) {
@@ -82,7 +95,7 @@ export function getPseudoElementStyles(
     }
 
     return rulesByPseudoElement;
-  }, {});
+  }, {} as { [name: string]: CSSStyleDeclaration[] });
 
   let appliedPseudoElementStyles: null | {
     [name: string]: { [property: string]: string };
@@ -101,6 +114,77 @@ export function getPseudoElementStyles(
   }
 
   return appliedPseudoElementStyles;
+}
+
+/**
+ * Extract styles that apply to all elements (universal selector)
+ */
+export function extractGlobalStyles(
+  styleRules: SelectorWithStyles[]
+): GlobalStyles {
+  const globalStyles: GlobalStyles = {
+    elementStyles: null,
+    pseudoStyles: null,
+    rootStyles: null,
+  };
+
+  for (const { selectorText, style } of styleRules) {
+    const selectors = selectorText.split(",").map((s) => s.trim());
+
+    const matchedTypes = {
+      hasGlobalElement: false,
+      hasRoot: false,
+      matchedPseudos: [] as string[],
+    };
+
+    for (const selector of selectors) {
+      if (globalElementRegex.test(selector)) {
+        matchedTypes.hasGlobalElement = true;
+      } else if (rootRegex.test(selector)) {
+        matchedTypes.hasRoot = true;
+      } else if (globalPseudoRegex.test(selector)) {
+        matchedTypes.matchedPseudos.push(selector);
+      }
+    }
+
+    // Apply styles based on matched types
+    if (matchedTypes.hasGlobalElement) {
+      globalStyles.elementStyles ||= {};
+      extractStylesTo(globalStyles.elementStyles, style);
+    }
+
+    if (matchedTypes.hasRoot) {
+      globalStyles.rootStyles ||= {};
+      extractStylesTo(globalStyles.rootStyles, style);
+    }
+
+    if (matchedTypes.matchedPseudos.length > 0) {
+      globalStyles.pseudoStyles ||= {};
+
+      for (const pseudoSelector of matchedTypes.matchedPseudos) {
+        const pseudoName = pseudoSelector.startsWith("::")
+          ? pseudoSelector
+          : ":" + pseudoSelector;
+        globalStyles.pseudoStyles[pseudoName] ||= {};
+        extractStylesTo(globalStyles.pseudoStyles[pseudoName], style);
+      }
+    }
+  }
+
+  return globalStyles;
+
+  function extractStylesTo(
+    targetObj: { [key: string]: string },
+    style: CSSStyleDeclaration
+  ) {
+    for (let i = 0; i < style.length; i++) {
+      const prop = style[i];
+      const value = style.getPropertyValue(prop);
+      if (value) {
+        targetObj[prop] = value;
+      }
+    }
+  }
 }
 
 /**
