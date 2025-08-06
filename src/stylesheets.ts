@@ -56,6 +56,14 @@ export function getPseudoElementStyles(
       const name = `::${match[2]}`;
       const childCombinator = match[1];
 
+      // Skip pseudo-elements with descendant combinators (like "div ::before")
+      // These should not apply pseudo-elements to descendant elements
+      if (childCombinator && childCombinator.trim()) {
+        baseSelector = baseSelector.slice(0, match.index) +
+          baseSelector.slice(match.index + match[0].length);
+        continue;
+      }
+
       if (seenPseudos) {
         if (!seenPseudos.includes(name)) {
           seenPseudos.push(name);
@@ -64,13 +72,8 @@ export function getPseudoElementStyles(
         seenPseudos = [name];
       }
 
-      baseSelector = childCombinator
-        ? baseSelector.slice(0, match.index) +
-          childCombinator +
-          "*" +
-          baseSelector.slice(match.index + match[0].length)
-        : baseSelector.slice(0, match.index) +
-          baseSelector.slice(match.index + match[0].length);
+      baseSelector = baseSelector.slice(0, match.index) +
+        baseSelector.slice(match.index + match[0].length);
     }
 
     if (seenPseudos && el.matches(baseSelector || "*")) {
