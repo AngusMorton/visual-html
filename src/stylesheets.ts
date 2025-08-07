@@ -21,6 +21,32 @@ export function getDocumentStyleRules(document: Document) {
 }
 
 /**
+ * Separates global rules from element-specific rules.
+ */
+export function separateGlobalRules(rules: SelectorWithStyles[]) {
+  const globalRules: SelectorWithStyles[] = [];
+  const elementRules: SelectorWithStyles[] = [];
+
+  for (const rule of rules) {
+    if (isGlobalRule(rule.selectorText)) {
+      globalRules.push(rule);
+    } else {
+      elementRules.push(rule);
+    }
+  }
+
+  return { globalRules, elementRules };
+}
+
+/**
+ * Checks if a selector represents a global rule that should be hoisted.
+ */
+function isGlobalRule(selector: string): boolean {
+  const trimmed = selector.trim();
+  return trimmed === "*" || trimmed === ":root";
+}
+
+/**
  * Given an element and global css rules, finds rules that apply to that
  * element (including the inline styles) and returns the specified css
  * properties as an object.
@@ -183,6 +209,48 @@ function getAppliedStylesForElement(
   }
 
   return properties;
+}
+
+/**
+ * Consolidates global rules into a structure suitable for CSS generation
+ */
+export function consolidateGlobalStyles(globalRules: SelectorWithStyles[]) {
+  if (globalRules.length === 0) {
+    return {};
+  }
+
+  const consolidatedStyles: {
+    [selector: string]: { [property: string]: string };
+  } = {};
+
+  for (let i = globalRules.length - 1; i >= 0; i--) {
+    const rule = globalRules[i];
+    const selector = rule.selectorText.trim();
+
+    // Handle multi-selector rules like "*, :root"
+    const selectors = selector
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => isGlobalRule(s));
+
+    for (const singleSelector of selectors) {
+      if (!consolidatedStyles[singleSelector]) {
+        consolidatedStyles[singleSelector] = {};
+      }
+
+      // Add all properties from this rule, respecting specificity order
+      const style = rule.style;
+      for (let j = 0; j < style.length; j++) {
+        const property = style[j];
+        const value = style.getPropertyValue(property);
+        if (value && !consolidatedStyles[singleSelector][property]) {
+          consolidatedStyles[singleSelector][property] = value;
+        }
+      }
+    }
+  }
+
+  return consolidatedStyles;
 }
 
 function isStyleRule(rule: CSSRule): rule is CSSStyleRule {

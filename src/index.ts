@@ -1,10 +1,12 @@
 import { VisualData, Options, SelectorWithStyles } from "./types";
-import { stringifyVisualData } from "./stringify";
+import { stringifyGlobalStyles, stringifyVisualData } from "./stringify";
 import { getVisualAttributes } from "./attributes";
 import {
   getDocumentStyleRules,
   getElementStyles,
   getPseudoElementStyles,
+  separateGlobalRules,
+  consolidateGlobalStyles,
 } from "./stylesheets";
 
 export { VisualData, Options };
@@ -17,12 +19,23 @@ const TEXT_TYPE = 3;
  * attributes and styles that convey visual information.
  */
 export default function visualHTML(el: Element, options: Options = {}) {
-  return stringifyVisualData(
-    getVisualData(el, {
-      ...options,
-      styleRules: getDocumentStyleRules(el.ownerDocument!),
-    })
-  );
+  const allStyleRules = getDocumentStyleRules(el.ownerDocument!);
+  const { globalRules, elementRules } = separateGlobalRules(allStyleRules);
+  const globalStylesString = globalRules
+    ? stringifyGlobalStyles(consolidateGlobalStyles(globalRules))
+    : null;
+
+  return [
+    globalStylesString,
+    stringifyVisualData(
+      getVisualData(el, {
+        ...options,
+        styleRules: elementRules,
+      })
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**
@@ -31,7 +44,9 @@ export default function visualHTML(el: Element, options: Options = {}) {
  */
 function getVisualData<T extends Element>(
   el: T,
-  options: Options & { styleRules: SelectorWithStyles[] }
+  options: Options & {
+    styleRules: SelectorWithStyles[];
+  }
 ) {
   const window = el.ownerDocument!.defaultView!;
   let childrenVisualData: Array<VisualData | string> | null = null;
@@ -47,7 +62,9 @@ function getVisualData<T extends Element>(
     do {
       switch (curNode.nodeType) {
         case ELEMENT_TYPE:
-          const childDisplayData = getVisualData(curNode as Element, options);
+          const childDisplayData = getVisualData(curNode as Element, {
+            ...options,
+          });
           if (childDisplayData) {
             childrenVisualData.push(childDisplayData);
           }

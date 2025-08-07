@@ -4,7 +4,7 @@ import { VisualData } from "./types";
  * Given the object representation of the visual data for an element
  * a string of a pretty printed HTML representation will be returned.
  */
-export function stringifyVisualData(data: VisualData | string | null) {
+export function stringifyVisualData(data: VisualData | string | null): string {
   if (!data) {
     return "";
   }
@@ -17,17 +17,21 @@ export function stringifyVisualData(data: VisualData | string | null) {
   const attrs = printAttributes(data);
   const children = printChildren(data);
 
-  return `<${
-    tagName +
-    (attrs.length
-      ? attrs.length === 1
-        ? ` ${attrs[0]}`
-        : `\n${indent(attrs.join("\n"))}\n`
-      : "") +
-    (children.length
-      ? `>\n${indent(children.join("\n"))}\n</${tagName}>`
-      : "/>")
-  }`;
+  const parts = [
+    `<${
+      tagName +
+      (attrs.length
+        ? attrs.length === 1
+          ? ` ${attrs[0]}`
+          : `\n${indent(attrs.join("\n"))}\n`
+        : "") +
+      (children.length
+        ? `>\n${indent(children.join("\n"))}\n</${tagName}>`
+        : "/>")
+    }`,
+  ].filter(Boolean);
+
+  return parts.join("\n");
 }
 
 function printAttributes(data: VisualData) {
@@ -88,6 +92,25 @@ function printProperties(styles: { [x: string]: string }) {
   return parts.length === 1
     ? parts[0]
     : `\n${indent(parts.sort().join(";\n"))}\n`;
+}
+
+export function stringifyGlobalStyles(globalStyles: {
+  [selector: string]: { [property: string]: string };
+}): string {
+  if (!globalStyles || Object.keys(globalStyles).length === 0) {
+    return "";
+  }
+
+  const selectors = Object.keys(globalStyles).sort();
+  const rules: string[] = [];
+
+  for (const selector of selectors) {
+    const properties = globalStyles[selector];
+    const formattedProperties = printProperties(properties);
+    rules.push(`${selector} {${formattedProperties}}`);
+  }
+
+  return `<style>\n${indent(rules.join("\n"))}\n</style>`;
 }
 
 function indent(str: string) {
